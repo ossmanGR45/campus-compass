@@ -1,19 +1,20 @@
 import { useState, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
-import { mockFAQs, serviceCategories, getCategoryInfo } from '@/data/mockData';
+import { useFAQs } from '@/hooks/useFAQs';
+import { useServiceCategories } from '@/hooks/useServiceCategories';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Search, ThumbsUp, Eye, MessageSquare, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Search, ThumbsUp, MessageSquare, X } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 
 const FAQ = () => {
@@ -22,24 +23,19 @@ const FAQ = () => {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  const { data: faqs = [], isLoading: faqsLoading } = useFAQs(selectedCategory || undefined);
+  const { data: categories = [], isLoading: categoriesLoading } = useServiceCategories();
+
   const filteredFAQs = useMemo(() => {
-    let results = mockFAQs;
-
-    if (selectedCategory) {
-      results = results.filter(faq => faq.category === selectedCategory);
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      results = results.filter(faq =>
-        faq.question.toLowerCase().includes(query) ||
-        faq.answer.toLowerCase().includes(query) ||
-        faq.tags.some(tag => tag.toLowerCase().includes(query))
-      );
-    }
-
-    return results;
-  }, [searchQuery, selectedCategory]);
+    if (!searchQuery.trim()) return faqs;
+    
+    const query = searchQuery.toLowerCase();
+    return faqs.filter(faq =>
+      faq.question.toLowerCase().includes(query) ||
+      faq.answer.toLowerCase().includes(query) ||
+      faq.tags.some(tag => tag.toLowerCase().includes(query))
+    );
+  }, [searchQuery, faqs]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -89,23 +85,33 @@ const FAQ = () => {
 
           {/* Category filters */}
           <div className="flex flex-wrap gap-2 justify-center mb-8">
-            <Button
-              variant={selectedCategory === null ? 'accent' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedCategory(null)}
-            >
-              All Categories
-            </Button>
-            {serviceCategories.map(category => (
-              <Button
-                key={category.id}
-                variant={selectedCategory === category.id ? 'accent' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedCategory(category.id)}
-              >
-                {category.name}
-              </Button>
-            ))}
+            {categoriesLoading ? (
+              <div className="flex gap-2">
+                {[1, 2, 3, 4].map(i => (
+                  <Skeleton key={i} className="h-8 w-24" />
+                ))}
+              </div>
+            ) : (
+              <>
+                <Button
+                  variant={selectedCategory === null ? 'accent' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedCategory(null)}
+                >
+                  All Categories
+                </Button>
+                {categories.map(category => (
+                  <Button
+                    key={category.id}
+                    variant={selectedCategory === category.id ? 'accent' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedCategory(category.id)}
+                  >
+                    {category.name}
+                  </Button>
+                ))}
+              </>
+            )}
           </div>
 
           {/* Active filters */}
@@ -123,49 +129,55 @@ const FAQ = () => {
 
           {/* Results */}
           <div className="max-w-3xl mx-auto">
-            {filteredFAQs.length > 0 ? (
+            {faqsLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map(i => (
+                  <Card key={i}>
+                    <CardContent className="p-6">
+                      <Skeleton className="h-6 w-3/4 mb-2" />
+                      <Skeleton className="h-4 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : filteredFAQs.length > 0 ? (
               <Accordion type="single" collapsible className="space-y-4">
-                {filteredFAQs.map((faq) => {
-                  const category = getCategoryInfo(faq.category);
-                  return (
-                    <AccordionItem
-                      key={faq.id}
-                      value={faq.id}
-                      className="border border-border/50 rounded-xl px-6 data-[state=open]:shadow-card transition-shadow bg-card"
-                    >
-                      <AccordionTrigger className="hover:no-underline py-4">
-                        <div className="flex flex-col items-start gap-2 text-left">
+                {filteredFAQs.map((faq) => (
+                  <AccordionItem
+                    key={faq.id}
+                    value={faq.id}
+                    className="border border-border/50 rounded-xl px-6 data-[state=open]:shadow-card transition-shadow bg-card"
+                  >
+                    <AccordionTrigger className="hover:no-underline py-4">
+                      <div className="flex flex-col items-start gap-2 text-left">
+                        {faq.category && (
                           <Badge variant="secondary" className="text-xs">
-                            {category?.name}
+                            {faq.category.name}
                           </Badge>
-                          <span className="font-medium text-base">{faq.question}</span>
+                        )}
+                        <span className="font-medium text-base">{faq.question}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4">
+                      <p className="text-muted-foreground mb-4">{faq.answer}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <ThumbsUp className="h-3 w-3" />
+                            {faq.helpful_count} found helpful
+                          </span>
                         </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="pb-4">
-                        <p className="text-muted-foreground mb-4">{faq.answer}</p>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <ThumbsUp className="h-3 w-3" />
-                              {faq.helpful} found helpful
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Eye className="h-3 w-3" />
-                              {faq.views} views
-                            </span>
-                          </div>
-                          <div className="flex gap-2">
-                            {faq.tags.slice(0, 3).map(tag => (
-                              <Badge key={tag} variant="outline" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
+                        <div className="flex gap-2">
+                          {faq.tags.slice(0, 3).map(tag => (
+                            <Badge key={tag} variant="outline" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
                         </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
               </Accordion>
             ) : (
               <Card className="text-center">

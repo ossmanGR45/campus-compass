@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
-import { serviceCategories } from '@/data/mockData';
+import { useServiceCategories } from '@/hooks/useServiceCategories';
+import { useCreateTicket, TicketPriority } from '@/hooks/useTickets';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -21,26 +23,38 @@ import {
   Send, 
   AlertCircle,
   Lightbulb,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
-import { TicketCategory, TicketPriority } from '@/types';
 
 const NewTicket = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  
+  const { data: categories = [], isLoading: categoriesLoading } = useServiceCategories();
+  const createTicket = useCreateTicket();
 
-  const initialCategory = searchParams.get('category') as TicketCategory || '';
+  const initialCategory = searchParams.get('category') || '';
   
   const [formData, setFormData] = useState({
     subject: '',
-    category: initialCategory,
+    category_id: initialCategory,
     priority: 'medium' as TicketPriority,
     description: ''
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (authLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </Layout>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -57,7 +71,7 @@ const NewTicket = () => {
                 <p className="text-muted-foreground mb-6">
                   Please sign in to submit a support ticket.
                 </p>
-                <Link to="/login">
+                <Link to="/auth">
                   <Button variant="accent">Sign In</Button>
                 </Link>
               </CardContent>
@@ -71,7 +85,7 @@ const NewTicket = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.subject || !formData.category || !formData.description) {
+    if (!formData.subject || !formData.category_id || !formData.description) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields.",
@@ -80,17 +94,27 @@ const NewTicket = () => {
       return;
     }
 
-    setIsSubmitting(true);
+    try {
+      await createTicket.mutateAsync({
+        subject: formData.subject,
+        description: formData.description,
+        category_id: formData.category_id,
+        priority: formData.priority,
+      });
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+      toast({
+        title: "Ticket Submitted!",
+        description: "Your support ticket has been created. We'll get back to you soon.",
+      });
 
-    toast({
-      title: "Ticket Submitted!",
-      description: "Your support ticket has been created. We'll get back to you soon.",
-    });
-
-    navigate('/tickets');
+      navigate('/tickets');
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create ticket. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -135,21 +159,25 @@ const NewTicket = () => {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="category">Category *</Label>
-                        <Select
-                          value={formData.category}
-                          onValueChange={(value) => setFormData({ ...formData, category: value as TicketCategory })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {serviceCategories.map(cat => (
-                              <SelectItem key={cat.id} value={cat.id}>
-                                {cat.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        {categoriesLoading ? (
+                          <Skeleton className="h-10 w-full" />
+                        ) : (
+                          <Select
+                            value={formData.category_id}
+                            onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categories.map(cat => (
+                                <SelectItem key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -187,10 +215,13 @@ const NewTicket = () => {
                         type="submit" 
                         variant="accent" 
                         className="gap-2"
-                        disabled={isSubmitting}
+                        disabled={createTicket.isPending}
                       >
-                        {isSubmitting ? (
-                          <>Submitting...</>
+                        {createTicket.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
                         ) : (
                           <>
                             <Send className="h-4 w-4" />

@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockTickets, mockFAQs, serviceCategories } from '@/data/mockData';
+import { useTickets } from '@/hooks/useTickets';
+import { useFAQs } from '@/hooks/useFAQs';
+import { useServiceCategories } from '@/hooks/useServiceCategories';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Ticket, 
   Users, 
@@ -20,7 +23,20 @@ import {
 import { Helmet } from 'react-helmet-async';
 
 const AdminDashboard = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: tickets = [], isLoading: ticketsLoading } = useTickets();
+  const { data: faqs = [] } = useFAQs();
+  const { data: categories = [] } = useServiceCategories();
+
+  if (authLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </Layout>
+    );
+  }
 
   if (!isAuthenticated || (user?.role !== 'admin' && user?.role !== 'staff')) {
     return (
@@ -37,7 +53,7 @@ const AdminDashboard = () => {
                 <p className="text-muted-foreground mb-6">
                   You don't have permission to access the admin dashboard.
                 </p>
-                <Link to="/login">
+                <Link to="/auth">
                   <Button variant="accent">Sign In as Staff/Admin</Button>
                 </Link>
               </CardContent>
@@ -49,17 +65,17 @@ const AdminDashboard = () => {
   }
 
   // Calculate stats
-  const totalTickets = mockTickets.length;
-  const openTickets = mockTickets.filter(t => t.status === 'open').length;
-  const inProgressTickets = mockTickets.filter(t => t.status === 'in-progress').length;
-  const resolvedTickets = mockTickets.filter(t => t.status === 'resolved').length;
-  const resolutionRate = Math.round((resolvedTickets / totalTickets) * 100);
+  const totalTickets = tickets.length;
+  const openTickets = tickets.filter(t => t.status === 'open').length;
+  const inProgressTickets = tickets.filter(t => t.status === 'in_progress').length;
+  const resolvedTickets = tickets.filter(t => t.status === 'resolved').length;
+  const resolutionRate = totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 0;
 
   // Category distribution
-  const categoryStats = serviceCategories.map(cat => ({
+  const categoryStats = categories.map(cat => ({
     ...cat,
-    count: mockTickets.filter(t => t.category === cat.id).length,
-    faqCount: mockFAQs.filter(f => f.category === cat.id).length
+    count: tickets.filter(t => t.category_id === cat.id).length,
+    faqCount: faqs.filter(f => f.category_id === cat.id).length
   })).sort((a, b) => b.count - a.count);
 
   return (
@@ -88,54 +104,64 @@ const AdminDashboard = () => {
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[
-              { 
-                title: 'Total Tickets', 
-                value: totalTickets, 
-                icon: Ticket, 
-                color: 'bg-blue-500',
-                trend: '+12% from last month'
-              },
-              { 
-                title: 'Open Tickets', 
-                value: openTickets, 
-                icon: Clock, 
-                color: 'bg-amber-500',
-                trend: '3 need attention'
-              },
-              { 
-                title: 'In Progress', 
-                value: inProgressTickets, 
-                icon: Users, 
-                color: 'bg-purple-500',
-                trend: 'Assigned to staff'
-              },
-              { 
-                title: 'Resolved', 
-                value: resolvedTickets, 
-                icon: CheckCircle, 
-                color: 'bg-emerald-500',
-                trend: `${resolutionRate}% resolution rate`
-              },
-            ].map((stat, index) => {
-              const Icon = stat.icon;
-              return (
-                <Card key={index} className="animate-slide-up" style={{ animationDelay: `${index * 0.05}s` }}>
+            {ticketsLoading ? (
+              [1, 2, 3, 4].map(i => (
+                <Card key={i}>
                   <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">{stat.title}</p>
-                        <p className="text-3xl font-bold">{stat.value}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{stat.trend}</p>
-                      </div>
-                      <div className={`h-12 w-12 rounded-xl ${stat.color} flex items-center justify-center text-white`}>
-                        <Icon className="h-6 w-6" />
-                      </div>
-                    </div>
+                    <Skeleton className="h-20 w-full" />
                   </CardContent>
                 </Card>
-              );
-            })}
+              ))
+            ) : (
+              [
+                { 
+                  title: 'Total Tickets', 
+                  value: totalTickets, 
+                  icon: Ticket, 
+                  color: 'bg-blue-500',
+                  trend: 'All time'
+                },
+                { 
+                  title: 'Open Tickets', 
+                  value: openTickets, 
+                  icon: Clock, 
+                  color: 'bg-amber-500',
+                  trend: 'Need attention'
+                },
+                { 
+                  title: 'In Progress', 
+                  value: inProgressTickets, 
+                  icon: Users, 
+                  color: 'bg-purple-500',
+                  trend: 'Assigned to staff'
+                },
+                { 
+                  title: 'Resolved', 
+                  value: resolvedTickets, 
+                  icon: CheckCircle, 
+                  color: 'bg-emerald-500',
+                  trend: `${resolutionRate}% resolution rate`
+                },
+              ].map((stat, index) => {
+                const Icon = stat.icon;
+                return (
+                  <Card key={index} className="animate-slide-up" style={{ animationDelay: `${index * 0.05}s` }}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">{stat.title}</p>
+                          <p className="text-3xl font-bold">{stat.value}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{stat.trend}</p>
+                        </div>
+                        <div className={`h-12 w-12 rounded-xl ${stat.color} flex items-center justify-center text-white`}>
+                          <Icon className="h-6 w-6" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
           </div>
 
           <div className="grid lg:grid-cols-3 gap-8">
@@ -191,7 +217,7 @@ const AdminDashboard = () => {
                   </Link>
                   <Link to="/faq" className="block">
                     <Button variant="outline" className="w-full justify-between">
-                      Update FAQs
+                      View FAQs
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
@@ -235,7 +261,7 @@ const AdminDashboard = () => {
                   <CardTitle className="text-base">Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {mockTickets.slice(0, 3).map((ticket) => (
+                  {tickets.slice(0, 3).map((ticket) => (
                     <Link 
                       key={ticket.id} 
                       to={`/tickets/${ticket.id}`}
@@ -243,10 +269,15 @@ const AdminDashboard = () => {
                     >
                       <p className="text-sm font-medium line-clamp-1">{ticket.subject}</p>
                       <p className="text-xs text-muted-foreground">
-                        {ticket.createdByName} • {ticket.status}
+                        {ticket.creator_name || 'Unknown'} • {ticket.status.replace('_', ' ')}
                       </p>
                     </Link>
                   ))}
+                  {tickets.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No recent tickets
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </div>

@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockTickets, getStatusColor, getPriorityColor, getCategoryInfo } from '@/data/mockData';
+import { useTicket, useTicketMessages, useUpdateTicketStatus, useAddTicketMessage, TicketStatus } from '@/hooks/useTickets';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -23,19 +24,55 @@ import {
   Send,
   AlertCircle,
   User,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 import { Helmet } from 'react-helmet-async';
 
+const getStatusColor = (status: string): string => {
+  const colors: Record<string, string> = {
+    'open': 'bg-blue-100 text-blue-700',
+    'in_progress': 'bg-amber-100 text-amber-700',
+    'resolved': 'bg-emerald-100 text-emerald-700',
+    'closed': 'bg-slate-100 text-slate-700'
+  };
+  return colors[status] || 'bg-slate-100 text-slate-700';
+};
+
+const getPriorityColor = (priority: string): string => {
+  const colors: Record<string, string> = {
+    'low': 'bg-slate-100 text-slate-600',
+    'medium': 'bg-blue-100 text-blue-600',
+    'high': 'bg-amber-100 text-amber-600',
+    'urgent': 'bg-red-100 text-red-600'
+  };
+  return colors[priority] || 'bg-slate-100 text-slate-600';
+};
+
 const TicketDetail = () => {
   const { ticketId } = useParams();
-  const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   
-  const ticket = mockTickets.find(t => t.id === ticketId);
+  const { data: ticket, isLoading: ticketLoading } = useTicket(ticketId);
+  const { data: messages = [], isLoading: messagesLoading } = useTicketMessages(ticketId);
+  const updateStatus = useUpdateTicketStatus();
+  const addMessage = useAddTicketMessage();
+  
   const [replyContent, setReplyContent] = useState('');
-  const [status, setStatus] = useState<string>(ticket?.status || 'open');
+
+  if (authLoading || ticketLoading) {
+    return (
+      <Layout>
+        <div className="container py-12">
+          <div className="space-y-4">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -52,7 +89,7 @@ const TicketDetail = () => {
                 <p className="text-muted-foreground mb-6">
                   Please sign in to view ticket details.
                 </p>
-                <Link to="/login">
+                <Link to="/auth">
                   <Button variant="accent">Sign In</Button>
                 </Link>
               </CardContent>
@@ -89,35 +126,63 @@ const TicketDetail = () => {
     );
   }
 
-  const category = getCategoryInfo(ticket.category);
   const isStaff = user?.role === 'staff' || user?.role === 'admin';
 
-  const formatDate = (date: Date) => {
+  const formatDate = (dateString: string) => {
     return new Intl.DateTimeFormat('en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    }).format(date);
+    }).format(new Date(dateString));
   };
 
-  const handleReply = () => {
-    if (!replyContent.trim()) return;
+  const formatStatus = (status: string) => status.replace('_', ' ');
+
+  const handleReply = async () => {
+    if (!replyContent.trim() || !ticketId) return;
     
-    toast({
-      title: "Reply Sent",
-      description: "Your reply has been added to the ticket."
-    });
-    setReplyContent('');
+    try {
+      await addMessage.mutateAsync({
+        ticketId,
+        content: replyContent,
+      });
+      
+      toast({
+        title: "Reply Sent",
+        description: "Your reply has been added to the ticket."
+      });
+      setReplyContent('');
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send reply. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleStatusChange = (newStatus: string) => {
-    setStatus(newStatus);
-    toast({
-      title: "Status Updated",
-      description: `Ticket status changed to ${newStatus.replace('-', ' ')}.`
-    });
+  const handleStatusChange = async (newStatus: string) => {
+    if (!ticketId) return;
+    
+    try {
+      await updateStatus.mutateAsync({
+        ticketId,
+        status: newStatus as TicketStatus,
+      });
+      
+      toast({
+        title: "Status Updated",
+        description: `Ticket status changed to ${formatStatus(newStatus)}.`
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update status. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -133,7 +198,7 @@ const TicketDetail = () => {
             <ChevronRight className="h-4 w-4" />
             <Link to="/tickets" className="hover:text-foreground transition-colors">Tickets</Link>
             <ChevronRight className="h-4 w-4" />
-            <span className="text-foreground">#{ticket.id.split('-')[1]}</span>
+            <span className="text-foreground">#{ticket.id.slice(0, 8)}</span>
           </nav>
 
           <div className="grid lg:grid-cols-3 gap-8">
@@ -145,13 +210,15 @@ const TicketDetail = () => {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex flex-wrap items-center gap-2 mb-3">
-                        <Badge className={getStatusColor(status)} variant="secondary">
-                          {status.replace('-', ' ')}
+                        <Badge className={getStatusColor(ticket.status)} variant="secondary">
+                          {formatStatus(ticket.status)}
                         </Badge>
                         <Badge className={getPriorityColor(ticket.priority)} variant="secondary">
                           {ticket.priority}
                         </Badge>
-                        <Badge variant="outline">{category?.name}</Badge>
+                        {ticket.category && (
+                          <Badge variant="outline">{ticket.category.name}</Badge>
+                        )}
                       </div>
                       <CardTitle className="text-xl">{ticket.subject}</CardTitle>
                     </div>
@@ -162,11 +229,11 @@ const TicketDetail = () => {
                   <div className="flex items-center gap-4 mt-6 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      {ticket.createdByName}
+                      {ticket.creator_name || 'Unknown'}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />
-                      {formatDate(ticket.createdAt)}
+                      {formatDate(ticket.created_at)}
                     </span>
                   </div>
                 </CardContent>
@@ -178,26 +245,29 @@ const TicketDetail = () => {
                   <CardTitle className="text-lg">Conversation</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {ticket.replies.length > 0 ? (
-                    ticket.replies.map((reply, index) => (
-                      <div key={reply.id}>
+                  {messagesLoading ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </div>
+                  ) : messages.length > 0 ? (
+                    messages.map((message, index) => (
+                      <div key={message.id}>
                         {index > 0 && <Separator className="mb-6" />}
                         <div className="flex gap-4">
                           <Avatar>
-                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${reply.authorName}`} />
-                            <AvatarFallback>{reply.authorName.charAt(0)}</AvatarFallback>
+                            <AvatarFallback>
+                              {(message.sender_name || 'U').charAt(0).toUpperCase()}
+                            </AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="font-medium">{reply.authorName}</span>
-                              <Badge variant="outline" className="text-xs capitalize">
-                                {reply.authorRole}
-                              </Badge>
+                              <span className="font-medium">{message.sender_name || 'Unknown'}</span>
                               <span className="text-xs text-muted-foreground">
-                                {formatDate(reply.createdAt)}
+                                {formatDate(message.created_at)}
                               </span>
                             </div>
-                            <p className="text-muted-foreground">{reply.content}</p>
+                            <p className="text-muted-foreground">{message.content}</p>
                           </div>
                         </div>
                       </div>
@@ -222,9 +292,13 @@ const TicketDetail = () => {
                         variant="accent" 
                         className="gap-2"
                         onClick={handleReply}
-                        disabled={!replyContent.trim()}
+                        disabled={!replyContent.trim() || addMessage.isPending}
                       >
-                        <Send className="h-4 w-4" />
+                        {addMessage.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
                         Send Reply
                       </Button>
                     </div>
@@ -244,20 +318,28 @@ const TicketDetail = () => {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Status</label>
-                      <Select value={status} onValueChange={handleStatusChange}>
+                      <Select 
+                        value={ticket.status} 
+                        onValueChange={handleStatusChange}
+                        disabled={updateStatus.isPending}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="open">Open</SelectItem>
-                          <SelectItem value="in-progress">In Progress</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
                           <SelectItem value="resolved">Resolved</SelectItem>
                           <SelectItem value="closed">Closed</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button variant="success" className="w-full gap-2">
+                    <Button 
+                      variant="success" 
+                      className="w-full gap-2"
+                      onClick={() => handleStatusChange('resolved')}
+                      disabled={updateStatus.isPending || ticket.status === 'resolved'}
+                    >
                       <CheckCircle className="h-4 w-4" />
                       Mark as Resolved
                     </Button>
@@ -273,12 +355,12 @@ const TicketDetail = () => {
                 <CardContent className="space-y-4 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Ticket ID</span>
-                    <span className="font-medium">#{ticket.id.split('-')[1]}</span>
+                    <span className="font-medium">#{ticket.id.slice(0, 8)}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Category</span>
-                    <span className="font-medium">{category?.name}</span>
+                    <span className="font-medium">{ticket.category?.name || 'N/A'}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between">
@@ -290,14 +372,14 @@ const TicketDetail = () => {
                   <Separator />
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Created</span>
-                    <span className="font-medium">{formatDate(ticket.createdAt)}</span>
+                    <span className="font-medium">{formatDate(ticket.created_at)}</span>
                   </div>
-                  {ticket.assignedToName && (
+                  {ticket.assignee_name && (
                     <>
                       <Separator />
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Assigned To</span>
-                        <span className="font-medium">{ticket.assignedToName}</span>
+                        <span className="font-medium">{ticket.assignee_name}</span>
                       </div>
                     </>
                   )}

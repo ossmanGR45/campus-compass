@@ -15,17 +15,24 @@ import {
   ThumbsDown,
   RefreshCw
 } from 'lucide-react';
-import { ChatMessage, FAQ } from '@/types';
-import { mockFAQs } from '@/data/mockData';
+import { useFAQs, FAQ } from '@/hooks/useFAQs';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  sources?: FAQ[];
+}
+
 // Simple RAG-like search function
-const searchFAQs = (query: string): FAQ[] => {
+const searchFAQs = (query: string, faqs: FAQ[]): FAQ[] => {
   const queryLower = query.toLowerCase();
   const keywords = queryLower.split(' ').filter(w => w.length > 2);
   
-  return mockFAQs
+  return faqs
     .map(faq => {
       let score = 0;
       const content = `${faq.question} ${faq.answer} ${faq.tags.join(' ')}`.toLowerCase();
@@ -63,6 +70,8 @@ const generateResponse = (query: string, relevantFAQs: FAQ[]): string => {
 };
 
 const Chat = () => {
+  const { data: faqs = [] } = useFAQs();
+  
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -98,7 +107,7 @@ const Chat = () => {
     // Simulate AI thinking
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
 
-    const relevantFAQs = searchFAQs(inputValue);
+    const relevantFAQs = searchFAQs(inputValue, faqs);
     const response = generateResponse(inputValue, relevantFAQs);
 
     const assistantMessage: ChatMessage = {
@@ -122,7 +131,7 @@ const Chat = () => {
 
   const suggestedQuestions = [
     "How do I connect to campus Wi-Fi?",
-    "How do I add or drop a course?",
+    "How do I reserve a study room?",
     "What are the library hours?",
     "How do I apply for financial aid?"
   ];
@@ -218,7 +227,7 @@ const Chat = () => {
                             <div className="mt-2 flex flex-wrap gap-1">
                               {message.sources.map((source, index) => (
                                 <Badge key={index} variant="outline" className="text-xs">
-                                  {source.category}
+                                  {source.category?.name || 'FAQ'}
                                 </Badge>
                               ))}
                             </div>

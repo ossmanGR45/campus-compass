@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
-import Login from "./pages/Login";
+import Auth from "./pages/Auth";
 import Services from "./pages/Services";
 import FAQ from "./pages/FAQ";
 import Chat from "./pages/Chat";
@@ -28,7 +28,8 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/login" element={<Auth />} />
               <Route path="/services" element={<Services />} />
               <Route path="/services/:categoryId" element={<Services />} />
               <Route path="/faq" element={<FAQ />} />

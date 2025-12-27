@@ -1,15 +1,18 @@
 import { Link, useParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
-import { serviceCategories, mockFAQs, getCategoryInfo } from '@/data/mockData';
+import { useServiceCategories, useServiceCategory } from '@/hooks/useServiceCategories';
+import { useFAQs } from '@/hooks/useFAQs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
-  Laptop, 
+  Monitor, 
   GraduationCap, 
   BookOpen, 
-  Wallet, 
+  DollarSign, 
   Home, 
   HelpCircle,
+  Users,
   ArrowRight,
   ChevronRight,
   Ticket
@@ -17,27 +20,29 @@ import {
 import { Helmet } from 'react-helmet-async';
 
 const iconMap: Record<string, React.ElementType> = {
-  Laptop,
+  Monitor,
   GraduationCap,
   BookOpen,
-  Wallet,
+  DollarSign,
   Home,
-  HelpCircle
+  HelpCircle,
+  Users,
 };
 
 const Services = () => {
   const { categoryId } = useParams();
-  const selectedCategory = categoryId ? getCategoryInfo(categoryId) : null;
+  const { data: categories = [], isLoading: categoriesLoading } = useServiceCategories();
+  const { data: category } = useServiceCategory(categoryId);
+  const { data: categoryFAQs = [], isLoading: faqsLoading } = useFAQs(categoryId);
 
-  if (selectedCategory) {
-    const categoryFAQs = mockFAQs.filter(faq => faq.category === categoryId);
-    const Icon = iconMap[selectedCategory.icon] || HelpCircle;
+  if (categoryId && category) {
+    const Icon = iconMap[category.icon] || HelpCircle;
 
     return (
       <>
         <Helmet>
-          <title>{selectedCategory.name} - CampusHelp</title>
-          <meta name="description" content={selectedCategory.description} />
+          <title>{category.name} - CampusHelp</title>
+          <meta name="description" content={category.description || ''} />
         </Helmet>
         <Layout>
           <div className="container py-12">
@@ -47,17 +52,17 @@ const Services = () => {
               <ChevronRight className="h-4 w-4" />
               <Link to="/services" className="hover:text-foreground transition-colors">Services</Link>
               <ChevronRight className="h-4 w-4" />
-              <span className="text-foreground">{selectedCategory.name}</span>
+              <span className="text-foreground">{category.name}</span>
             </nav>
 
             {/* Header */}
             <div className="flex items-start gap-6 mb-10">
-              <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl ${selectedCategory.color} text-white shadow-lg`}>
+              <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl ${category.color} text-white shadow-lg`}>
                 <Icon className="h-8 w-8" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold mb-2">{selectedCategory.name}</h1>
-                <p className="text-muted-foreground text-lg">{selectedCategory.description}</p>
+                <h1 className="text-3xl font-bold mb-2">{category.name}</h1>
+                <p className="text-muted-foreground text-lg">{category.description}</p>
               </div>
             </div>
 
@@ -66,7 +71,7 @@ const Services = () => {
               <Link to="/chat">
                 <Button variant="accent" className="gap-2">
                   <HelpCircle className="h-4 w-4" />
-                  Ask AI About {selectedCategory.name}
+                  Ask AI About {category.name}
                 </Button>
               </Link>
               <Link to={`/tickets/new?category=${categoryId}`}>
@@ -80,7 +85,18 @@ const Services = () => {
             {/* FAQs for this category */}
             <div>
               <h2 className="text-xl font-semibold mb-6">Frequently Asked Questions</h2>
-              {categoryFAQs.length > 0 ? (
+              {faqsLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => (
+                    <Card key={i}>
+                      <CardContent className="p-6">
+                        <Skeleton className="h-6 w-3/4 mb-2" />
+                        <Skeleton className="h-4 w-full" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : categoryFAQs.length > 0 ? (
                 <div className="space-y-4">
                   {categoryFAQs.map((faq) => (
                     <Card key={faq.id} className="group hover:shadow-card transition-shadow">
@@ -126,45 +142,55 @@ const Services = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {serviceCategories.map((category, index) => {
-              const Icon = iconMap[category.icon] || HelpCircle;
-              const faqCount = mockFAQs.filter(f => f.category === category.id).length;
-              
-              return (
-                <Link 
-                  key={category.id} 
-                  to={`/services/${category.id}`}
-                  className="block animate-slide-up"
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <Card className="group h-full transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1 border-border/50 overflow-hidden">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start gap-4">
-                        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${category.color} text-white shadow-soft transition-transform group-hover:scale-110`}>
-                          <Icon className="h-6 w-6" />
+          {categoriesLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <Card key={i}>
+                  <CardContent className="p-6">
+                    <Skeleton className="h-12 w-12 rounded-xl mb-4" />
+                    <Skeleton className="h-6 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {categories.map((cat, index) => {
+                const Icon = iconMap[cat.icon] || HelpCircle;
+                
+                return (
+                  <Link 
+                    key={cat.id} 
+                    to={`/services/${cat.id}`}
+                    className="block animate-slide-up"
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                    <Card className="group h-full transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1 border-border/50 overflow-hidden">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start gap-4">
+                          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${cat.color} text-white shadow-soft transition-transform group-hover:scale-110`}>
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          <div className="flex-1">
+                            <CardTitle className="text-lg group-hover:text-accent transition-colors">
+                              {cat.name}
+                            </CardTitle>
+                          </div>
+                          <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-1" />
                         </div>
-                        <div className="flex-1">
-                          <CardTitle className="text-lg group-hover:text-accent transition-colors">
-                            {category.name}
-                          </CardTitle>
-                        </div>
-                        <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-1" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {category.description}
-                      </p>
-                      <div className="text-xs text-muted-foreground">
-                        {faqCount} FAQ{faqCount !== 1 ? 's' : ''} available
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground">
+                          {cat.description}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
       </Layout>
     </>

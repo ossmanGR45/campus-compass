@@ -21,7 +21,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const Header = () => {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, signOut, isAuthenticated } = useAuth();
   const location = useLocation();
 
   const navLinks = [
@@ -31,6 +31,8 @@ const Header = () => {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  const displayName = user?.fullName || user?.email?.split('@')[0] || 'User';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -78,15 +80,15 @@ const Header = () => {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={user.avatarUrl || undefined} alt={displayName} />
+                    <AvatarFallback>{displayName.charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user.name}</p>
+                    <p className="text-sm font-medium leading-none">{displayName}</p>
                     <p className="text-xs leading-none text-muted-foreground">
                       {user.email}
                     </p>
@@ -96,7 +98,7 @@ const Header = () => {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {user.role === 'admin' && (
+                {(user.role === 'admin' || user.role === 'staff') && (
                   <DropdownMenuItem asChild>
                     <Link to="/admin" className="cursor-pointer">
                       <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -111,14 +113,14 @@ const Header = () => {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive">
+                <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link to="/login">
+            <Link to="/auth">
               <Button variant="outline" size="sm" className="gap-2">
                 <User className="h-4 w-4" />
                 <span className="hidden sm:inline">Sign In</span>
